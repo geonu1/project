@@ -1,0 +1,135 @@
+go athena
+
+# ---------- mesh generation
+
+line x loc=0 spac=0.5
+
+line x loc=4 spac=0.1
+line x loc=5 spac=0.01
+line x loc=6 spac=0.1
+
+line x loc=10 spac=0.5
+
+line y loc=0 spac=0.01
+line y loc=5 spac=0.1
+
+init silicon c.boron=1e17 two // 기판농도의 변화
+
+struc outfile=mesh.str
+
+# ----------- oxidation & oxide etch
+
+diffuse time=65 temp=900 dry
+extract name="Tox" thickness oxide mat.occno=1 x.val=0.1 // 게이트옥사이드 두께의 변화
+
+# ---------- oxide & poly depo
+
+deposit poly thick=0.25 div=5 // 게이트 물질의 변화
+
+# ---------- poly patterning
+
+etch poly p1.x=4 left
+etch poly p1.x=6 right   // channel length의 변화
+
+#tonyplot
+
+etch oxide thick=0.5
+
+# ---------- high doping (source, drain, gate)
+
+implant phosphor dose=5e16 energy=30 tilt=0 rot=0  // dose, energy의 변화
+
+diffuse time=10 temp=1000 nitro  // time, temp의 변화
+
+# ---------- contact oxide patterning
+
+deposit oxide thick=0.2 div=4
+etch oxide start x=1 y=-10
+etch cont x=1 y=1
+etch cont x=2 y=1
+etch done x=2 y=-10
+
+etch oxide start x=8 y=-10
+etch cont x=8 y=1
+etch cont x=9 y=1
+etch done x=9 y=-10
+
+#tonyplot
+
+# ---------- contact metal patterning
+
+deposit alum thick=0.2 div=5
+etch alum start x=3 y=-10
+etch cont x=3 y=1
+etch cont x=7 y=1
+etch done x=7 y=-10
+
+# ---------- electrode assign
+
+electrode name=sub backside
+electrode name=gate x=5
+electrode name=source x=1.5
+electrode name=drain x=8.5
+
+struc outfile=electrode.str
+tonyplot electrode.str
+
+# extract final S/D Xj...
+extract name="nxj" xj silicon mat.occno=1 x.val=0.1 junc.occno=1
+
+# extract the N++ regions sheet resistance...
+extract name="n++ sheet rho" sheet.res material="Silicon" mat.occno=1 x.val=0.1 region.occno=1
+
+
+#---------device simulation /atlas
+
+go atlas
+
+mesh infile=electrode.str
+
+contact name=gate workf=4.17  // 게이트 물질의 변화
+#contact name=source common=drain short
+
+models srh conmob temper=300 print
+#-----------IdVg
+
+solve init
+
+solve vdrain=0.1
+
+log outfile=idvg.log
+solve vgate=0 vstep=0.05 vfinal=1.2 name=gate
+log off
+
+tonyplot idvg.log
+
+extract init infile="idvg.log"
+extract name="vth" xintercept(maxslope(curve(v."gate",i."drain")))
+
+#-------------IdVg
+
+solve init
+
+solve vgate=0.1
+save outfile=vg1.str
+solve vgate=1.0
+save outfile=vg2.str
+solve vgate=2.0
+save outfile=vg3.str
+
+load infile=vg1.str master
+log outfile=idvd1.log
+solve vdrain=0 vstep=0.25 vfinal=3.0 name=drain
+log off
+
+load infile=vg2.str master
+log outfile=idvd2.log
+solve vdrain=0 vstep=0.25 vfinal=3.0 name=drain
+log off
+
+load infile=vg3.str master
+log outfile=idvd3.log
+solve vdrain=0 vstep=0.25 vfinal=3.0 name=drain
+log off
+
+tonyplot -overlay idvd1.log idvd2.log idvd3.log
